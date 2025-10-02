@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SIMP CHAT — Hybrid AI</title>
+<style>
+  :root{--bg:#0b1220;--panel:#071428;--accent:#25D366;--muted:#9fb4c2;--me:#083c2f;--other:#0b2a3a}
+  html,body{height:100%;margin:0;background:linear-gradient(180deg,#071427,#04202b);color:#e6f0f2;font-family:Inter,system-ui,Arial;}
+  .app{max-width:980px;margin:18px auto;display:grid;grid-template-columns:320px 1fr;gap:18px;padding:18px;}
+  .panel{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:12px;padding:12px;box-shadow:0 8px 30px rgba(2,6,9,0.6);}
+  .brand{display:flex;gap:10px;align-items:center}
+  .logo{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#0aa66f);display:flex;align-items:center;justify-content:center;font-weight:700;color:#042;}
+  h1{font-size:16px;margin:0}
+  .contacts{margin-top:12px;display:flex;flex-direction:column;gap:10px}
+  .contact{display:flex;gap:10px;align-items:center;padding:8px;border-radius:8px;cursor:pointer}
+  .avatar{width:44px;height:44px;border-radius:10px;background:#092a2a;display:flex;align-items:center;justify-content:center;font-weight:700;color:#bdebd0}
+  .small{font-size:12px;color:var(--muted)}
+  .chat{display:flex;flex-direction:column;height:70vh;min-height:420px}
+  .chat-header{display:flex;align-items:center;justify-content:space-between;padding:8px}
+  .chat-body{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.01),transparent)}
+  .bubble{max-width:72%;padding:10px 12px;border-radius:12px;white-space:pre-wrap;box-shadow:0 6px 18px rgba(0,0,0,0.35)}
+  .me{align-self:flex-end;background:linear-gradient(90deg,#0b6;#086);color:#001}
+  .ai{align-self:flex-start;background:#012936;color:#dff6f0}
+  .composer{display:flex;gap:8px;padding:10px;align-items:center}
+  input[type=text],textarea{flex:1;padding:10px;border-radius:10px;border:0;outline:none;background:transparent;color:inherit;border:1px solid rgba(255,255,255,0.03);}
+  button{background:var(--accent);border:0;color:#042;padding:10px 12px;border-radius:10px;cursor:pointer;font-weight:700}
+  footer{Margin-top:8px;text-align:center;color:var(--muted);font-size:12px}
+  .settings{margin-top:12px;padding:10px;border-radius:8px;border:1px dashed rgba(255,255,255,0.03);}
+  .hint{color:var(--muted);font-size:12px}
+  @media (max-width:900px){.app{grid-template-columns:1fr;}.chat{height:64vh}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="panel">
+    <div class="brand"><div class="logo">S</div><div><h1>SIMP CHAT</h1><div class="small">Hybrid AI — Offline + OpenAI</div></div></div>
+
+    <div class="settings">
+      <div class="small">AI Mode</div>
+      <label><input type="checkbox" id="useOpenAI" /> Use OpenAI (optional)</label>
+      <div style="margin-top:8px" class="small">OpenAI API Key (paste here if you want full AI):</div>
+      <input id="apiKey" placeholder="sk-..." style="width:100%;margin-top:6px" />
+      <label class="small"><input type="checkbox" id="storeKey" /> Store key locally (insecure)</label>
+      <div style="margin-top:8px" class="hint">If you don't enter a key, the app uses the offline mini-AI. For privacy, using a server proxy is recommended for production.</div>
+    </div>
+
+    <div class="contacts">
+      <div class="contact" id="aiContact"><div class="avatar">AI</div><div><div style="font-weight:700">SmartBot 🤖</div><div class="small">Ask math, knowledge or chat</div></div></div>
+    </div>
+
+    <div style="margin-top:14px" class="small">Quick tips:<br>- Type math like <code>2+2*5</code> or <code>sqrt(16)</code>.<br>- Ask: <code>capital of France</code>, <code>who is Einstein</code></div>
+  </div>
+
+  <div class="panel chat">
+    <div class="chat-header"><div><strong id="chatTitle">SmartBot 🤖</strong><div class="small">Offline-first — uses OpenAI if enabled</div></div><div><button id="clearBtn">Clear</button></div></div>
+    <div class="chat-body" id="chatBody"></div>
+
+    <div class="composer">
+      <input id="input" type="text" placeholder="Type a message, math, or question..." />
+      <button id="sendBtn">Send</button>
+    </div>
+    <footer>© NARESH CREATED BY NARESH MARI</footer>
+  </div>
+</div>
+
+<script>
+/* Hybrid AI Chat — Offline brain + optional OpenAI integration */
+
+const chatBody = document.getElementById('chatBody');
+const inputEl = document.getElementById('input');
+const sendBtn = document.getElementById('sendBtn');
+const useOpenAI = document.getElementById('useOpenAI');
+const apiKeyInput = document.getElementById('apiKey');
+const storeKey = document.getElementById('storeKey');
+const LS_KEY = 'simp_openai_key_v2';
+
+// restore stored key if present
+if(localStorage.getItem(LS_KEY)){
+  apiKeyInput.value = localStorage.getItem(LS_KEY);
+  storeKey.checked = true;
+  useOpenAI.checked = true;
+}
+
+// render message
+function addBubble(text, cls='ai') {
+  const d = document.createElement('div');
+  d.className = 'bubble ' + (cls==='me' ? 'me' : 'ai');
+  d.textContent = text;
+  chatBody.appendChild(d);
+  chatBody.scrollTop = chatBody.scrollHeight;
+}
+
+// small helper to show typing indicator
+function addTyping() {
+  const el = document.createElement('div'); el.className='bubble ai'; el.id='typing'; el.textContent='SmartBot is typing...'; chatBody.appendChild(el); chatBody.scrollTop = chatBody.scrollHeight;
+}
+function removeTyping(){ const t = document.getElementById('typing'); if(t) t.remove(); }
+
+// ---- Offline mini AI ----
+const GK = {
+  'capital of india': 'New Delhi.',
+  'capital of france': 'Paris.',
+  'capital of uk': 'London.',
+  'who is einstein': 'Albert Einstein (1879–1955) was a theoretical physicist, best known for the theory of relativity.',
+  'who is naresh': 'Naresh — creator of SIMP CHAT (as credited).',
+  'largest planet': 'Jupiter is the largest planet in the Solar System.'
+};
+
+function isMathExpression(s){
+  // allow digits, operators, parentheses, decimals, ^, %, spaces, letters for sqrt/pow
+  const safe = /^[0-9+\-*/().,^% \tsqrtpow]+$/i;
+  return safe.test(s.trim());
+}
+
+function evalMath(expr){
+  try{
+    // normalize: replace ^ with **, support sqrt(...) and pow(a,b)
+    let e = expr.replace(/\^/g, '**').replace(/—/g,'-');
+    // Replace sqrt(x) with Math.sqrt(x) and pow(a,b) with Math.pow(a,b)
+    e = e.replace(/sqrt\s*\(/gi, 'Math.sqrt(');
+    e = e.replace(/pow\s*\(/gi, 'Math.pow(');
+    // block any letters besides Math and numbers/operators by test above
+    // evaluate in a Function with Math in scope
+    const fn = new Function('Math', 'return ' + e + ';');
+    const res = fn(Math);
+    if(typeof res === 'number' && isFinite(res)) return String(res);
+    return 'Could not compute that expression.';
+  } catch(err){
+    return 'Error evaluating math: ' + err.message;
+  }
+}
+
+// simple offline NLP for question detection
+function offlineReply(text){
+  const s = text.trim().toLowerCase();
+  // direct GK
+  for(const k of Object.keys(GK)){
+    if(s.includes(k)) return GK[k];
+  }
+  // math
+  if(isMathExpression(s)){
+    return evalMath(s);
+  }
+  // help keywords
+  if(s === 'help' || s === 'commands') return "Try math (e.g. 2+2*5, sqrt(16)), or ask GK like 'capital of France', or chat casually.";
+  // small chitchat patterns
+  if(s.includes('hello') || s.includes('hi')) return 'Hello! I am SmartBot — ask me math or GK or say help.';
+  if(s.includes('time')) return "I cannot access real-time clock in this demo, but your device knows the time.";
+  // fallback small-talk
+  const fallbacks = ['Interesting — tell me more.', "I see. Let's think about that.", "Nice! Can you expand?", "Hmm — what's next?"];
+  return fallbacks[Math.floor(Math.random()*fallbacks.length)];
+}
+
+// ---- OpenAI integration (optional) ----
+async function callOpenAI(apiKey, userText){
+  const system = "You are SmartBot — friendly assistant. Keep answers concise for chat and prefer short examples when useful.";
+  const payload = {
+    model: "gpt-4o-mini",
+    messages: [{role:'system', content: system}, {role:'user', content: userText}],
+    max_tokens: 512,
+    temperature: 0.6
+  };
+  const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer ' + apiKey},
+    body: JSON.stringify(payload)
+  });
+  if(!resp.ok){
+    const txt = await resp.text();
+    throw new Error('OpenAI error: ' + resp.status + ' ' + txt);
+  }
+  const data = await resp.json();
+  const txt = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+  return txt || 'No reply from OpenAI.';
+}
+
+// ---- Main send logic ----
+sendBtn.addEventListener('click', onSend);
+inputEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter') onSend(); });
+
+async function onSend(){
+  const text = inputEl.value.trim();
+  if(!text) return;
+  addBubble(text, 'me');
+  inputEl.value='';
+  // decide path: openai if enabled and key provided, else offline
+  if(useOpenAI.checked && (apiKeyInput.value.trim() || localStorage.getItem(LS_KEY))){
+    const key = apiKeyInput.value.trim() || localStorage.getItem(LS_KEY);
+    if(storeKey.checked) localStorage.setItem(LS_KEY, key);
+    addTyping();
+    try{
+      const reply = await callOpenAI(key, text);
+      removeTyping();
+      addBubble(reply, 'ai');
+    } catch(err){
+      removeTyping();
+      addBubble('OpenAI error: ' + err.message + ' — falling back to offline AI.', 'ai');
+      // fallback offline
+      const r = offlineReply(text);
+      addBubble(r, 'ai');
+    }
+  } else {
+    // offline path
+    addTyping();
+    setTimeout(()=>{
+      removeTyping();
+      const r = offlineReply(text);
+      addBubble(r, 'ai');
+    }, 300 + Math.random()*700);
+  }
+}
+
+// clear chat
+document.getElementById('clearBtn').addEventListener('click', ()=>{ chatBody.innerHTML=''; addBubble('Hi! I am SmartBot. Ask me math or general-knowledge questions.', 'ai'); });
+
+// initial greeting
+addBubble('Hi! I am SmartBot. Ask me math or general-knowledge questions.', 'ai');
+</script>
+</body>
+</html>
